@@ -20,7 +20,7 @@
 # shellcheck source=lib.sh
 source "$(dirname "$0")/lib.sh"
 
-BUDGET=800
+BUDGET=250
 ROOT=$(ratchet_root "${1:-}")
 SRC="$ROOT/crates/ledger-core/src"
 
