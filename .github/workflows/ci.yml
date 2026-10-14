@@ -1,0 +1,68 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  # First and cheapest. There is no toolchain install step: the runner already
+  # has bash, jq, cargo and shellcheck, and a broken invariant should fail
+  # before anyone waits on a compiler.
+  ratchets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: shellcheck the ratchets
+        run: shellcheck scripts/ratchets/*.sh scripts/ratchets/fixtures/*.sh scripts/ratchets/fixtures/*/*.sh
+      - name: the ratchets hold
+        run: ./scripts/ratchets/all.sh
+      - name: every ratchet can fail
+        run: ./scripts/ratchets/test-ratchets.sh
+
+  build:
+    needs: ratchets
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # The workspace arrives with plan 02. Until then this job says so in the
+      # run summary instead of looking like a build that passed.
+      - id: gate
+        run: |
+          if [ -f Cargo.toml ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::No Cargo workspace yet. The build turns on when plan 02 adds one."
+          fi
+      - if: steps.gate.outputs.ready == 'true'
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - if: steps.gate.outputs.ready == 'true'
+        run: cargo fmt --all -- --check
+      - if: steps.gate.outputs.ready == 'true'
+        run: cargo clippy --workspace --all-targets -- -D warnings
+      - if: steps.gate.outputs.ready == 'true'
+        run: cargo test --workspace
+
+  crash-recovery:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Present from the first commit, so the crash test has a place waiting
+      # for it. It turns on when plan 04 adds the test.
+      - id: gate
+        run: |
+          if [ -f crates/ledgerd/tests/crash_recovery.rs ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::No crash test yet. This job turns on when plan 04 adds it."
+          fi
+      - if: steps.gate.outputs.ready == 'true'
+        uses: dtolnay/rust-toolchain@stable
+      - if: steps.gate.outputs.ready == 'true'
+        run: cargo test -p ledgerd --test crash_recovery -- --ignored --nocapture
