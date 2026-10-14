@@ -14,6 +14,10 @@ jobs:
   # before anyone waits on a compiler.
   ratchets:
     runs-on: ubuntu-latest
+    # cargo metadata works with any cargo. Without this, rustup would install
+    # the pinned toolchain first, and this job promises no install step.
+    env:
+      RUSTUP_TOOLCHAIN: stable
     steps:
       - uses: actions/checkout@v4
       - name: shellcheck the ratchets
@@ -38,9 +42,8 @@ jobs:
             echo "::notice::No Cargo workspace yet. The build turns on when plan 02 adds one."
           fi
       - if: steps.gate.outputs.ready == 'true'
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt, clippy
+        name: install the toolchain pinned in rust-toolchain.toml
+        run: rustup toolchain install "$(sed -n 's/^channel = "\(.*\)"$/\1/p' rust-toolchain.toml)" --profile minimal --component rustfmt --component clippy
       - if: steps.gate.outputs.ready == 'true'
         run: cargo fmt --all -- --check
       - if: steps.gate.outputs.ready == 'true'
@@ -63,6 +66,7 @@ jobs:
             echo "::notice::No crash test yet. This job turns on when plan 04 adds it."
           fi
       - if: steps.gate.outputs.ready == 'true'
-        uses: dtolnay/rust-toolchain@stable
+        name: install the toolchain pinned in rust-toolchain.toml
+        run: rustup toolchain install "$(sed -n 's/^channel = "\(.*\)"$/\1/p' rust-toolchain.toml)" --profile minimal
       - if: steps.gate.outputs.ready == 'true'
         run: cargo test -p ledgerd --test crash_recovery -- --ignored --nocapture
