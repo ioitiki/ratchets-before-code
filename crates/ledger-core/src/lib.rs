@@ -10,7 +10,7 @@ mod state;
 pub use backoff::backoff_ms;
 pub use state::State;
 
-use ledger_api::{Command, Event, Job, JobId, JobState, LeaseId, Millis, Refusal};
+use ledger_api::{Command, EffectSemantics, Event, Job, JobId, JobState, LeaseId, Millis, Refusal};
 
 /// Decide what a command means against the current state.
 ///
@@ -71,6 +71,47 @@ pub fn decide(state: &State, command: Command) -> Result<Vec<Event>, Refusal> {
 /// Fold one event into state. Events are facts, so applying one never fails.
 pub fn apply(state: &mut State, event: &Event) {
     state.apply(event);
+}
+
+/// What the journal knows about one attempt's effect, as recovery needs it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum EffectRecord {
+    /// The intent was recorded and no outcome followed: its fate is unknown.
+    Unfinished,
+    /// The effect finished, and this is the outcome it recorded.
+    Finished(String),
+}
+
+/// Decide what a restart means for every leased job. On a single node, any
+/// lease alive at startup belongs to a process that is gone. `effect` says
+/// what the journal knows about a job's current attempt (ADR 0003).
+pub fn recover(
+    state: &State,
+    now: Millis,
+    effect: impl Fn(JobId, u32) -> Option<EffectRecord>,
+) -> Vec<Event> {
+    state
+        .jobs()
+        .filter(|job| matches!(job.state, JobState::Leased { .. }))
+        .map(|job| match effect(job.id, job.attempts) {
+            Some(EffectRecord::Finished(result)) => Event::Succeeded {
+                job: job.id,
+                result,
+            },
+            Some(EffectRecord::Unfinished)
+                if job.kind.effect_semantics() == EffectSemantics::NotIdempotent =>
+            {
+                Event::Died {
+                    job: job.id,
+                    reason: format!(
+                        "restarted mid-effect on attempt {}; not idempotent, so not re-run",
+                        job.attempts
+                    ),
+                }
+            }
+            _ => after_failed_attempt(job, "restarted mid-attempt".to_string(), now),
+        })
+        .collect()
 }
 
 /// The job, if `lease` is its current lease.
