@@ -47,12 +47,26 @@ fn a_second_ledgerd_on_the_same_journal_exits_and_changes_nothing() {
     };
     let mut stdout = String::new();
     let mut stderr = String::new();
-    b.stdout.take().unwrap().read_to_string(&mut stdout).unwrap();
-    b.stderr.take().unwrap().read_to_string(&mut stderr).unwrap();
+    b.stdout
+        .take()
+        .unwrap()
+        .read_to_string(&mut stdout)
+        .unwrap();
+    b.stderr
+        .take()
+        .unwrap()
+        .read_to_string(&mut stderr)
+        .unwrap();
     println!("B exited with {exit}; stderr: {stderr}");
     assert!(!exit.success(), "B must exit non-zero");
-    assert!(stderr.contains("JournalInUse"), "B names the cause: {stderr}");
-    assert!(stdout.is_empty(), "B never got as far as listening: {stdout}");
+    assert!(
+        stderr.contains("JournalInUse"),
+        "B names the cause: {stderr}"
+    );
+    assert!(
+        stdout.is_empty(),
+        "B never got as far as listening: {stdout}"
+    );
 
     // A's job finishes on its first attempt: B never expired A's lease.
     let status = wait_for(&a.addr, job, Duration::from_secs(10), |s| {

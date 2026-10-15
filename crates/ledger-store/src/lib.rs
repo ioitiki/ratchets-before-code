@@ -32,7 +32,9 @@ pub enum StoreError {
         attempt: u32,
     },
     /// Another holder has the journal's lock. One `ledgerd` per journal (ADR 0005).
-    JournalInUse { lock: PathBuf },
+    JournalInUse {
+        lock: PathBuf,
+    },
     /// The journal's lock file could not be opened or locked.
     Lock(std::io::Error),
 }
