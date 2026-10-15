@@ -662,6 +662,7 @@ target/plan05/alias.sh: line 31: 846465 Killed                     LEDGER_DB=$DI
    - *Measured:* `target/plan05-alias.txt`, above. C started on `alias.db`, a symlink to A's live `ledger.db`, with its own `alias.db.lock`.
    - Running C against a job in flight was not measured. From report 05's case 3, it would re-run the effect, as B did there.
    - *Proposed next step:* for the operator to decide; this plan didn't change the mechanism. One option: build the lock's name from the journal's resolved path, so every spelling of one file meets at one lock file. The journal may not exist yet on the first open, so that means resolving its directory and then appending the file name. Another option: document "one path per journal" as a limit, beside "host-local".
+   - *Fixed on this branch, by the first option:* see "Addendum: the symlink finding, fixed" at the end of this report.
 2. **The refusal prints the Debug form.**
    - *Measured:* B's stderr, above.
    - *Proposed next step:* none needed for correctness. If operators should see the `Display` text, `main` would have to print the error itself.
@@ -766,3 +767,302 @@ $ git diff --stat origin/main -- scripts/ crates/ledger-core/ docs/pipeline/repo
 - For the red run, `git worktree add` and `git worktree remove` wrote to the repository's shared `.git`, in the main checkout.
 - `test-ratchets.sh` made scratch copies with `mktemp -d`.
 - `tempfile::tempdir()` made the tests' journals under the dev shell's temporary directory (`/tmp/nix-shell.*`).
+
+## Addendum: the symlink finding, fixed
+
+The coordinator approved a follow-up on PR #6, within ADR 0005's decision: close finding 1 on this branch, with new commits only. This section was added after `6e24f53`. The sections above are unedited, except for one line under finding 1 that points here, so read them as of `6e24f53`. The same rules apply to the output quoted here: it is verbatim, except that the worktree's absolute path is shortened to `…` and Nix's "Git tree is dirty" lines are removed. The raw captures are `target/plan05-addendum-*.txt`.
+
+### What changed
+
+`4598ad2`, `ledger-store: name the journal's lock after its resolved path`:
+- **`lock_journal` names the lock after the journal's real path,** from a new helper, `resolve`:
+  - If the journal exists, its real path is `fs::canonicalize(path)`.
+  - If it doesn't exist yet, `canonicalize` fails with `NotFound`. The real path is then the canonicalized parent directory joined with the file name, and an empty parent counts as `.`.
+  - Any other failure is `StoreError::Lock`, like every other lock-file error. That covers a path that names no file and a directory that can't be resolved.
+- **Its doc comment says so:** every spelling of one file meets at one lock file, beside the real journal.
+- **A new test, `a_symlink_to_a_journal_already_open_is_refused`,** in `crates/ledger-store/tests/lock.rs`. It opens `ledger.db`, symlinks `alias.db` to it with `std::os::unix::fs::symlink`, and expects `Store::open(&alias)` to fail with `JournalInUse`.
+- **The existing lock-path assertion changed.** In `a_journal_already_open_is_refused`, the expected lock is now the canonicalized tempdir joined with `ledger.db.lock`.
+
+### Red, then green
+
+**Red:** the test changes alone, before the fix:
+
+```
+$ nix develop -c bash -o pipefail -c 'cargo test -p ledger-store --test lock 2>&1 | grep -vE "^\s+(Compiling|Finished|Running)"'
+
+running 4 tests
+test in_memory_journals_do_not_contend ... ok
+test a_journal_already_open_is_refused ... ok
+test the_journal_opens_again_once_its_holder_is_dropped ... ok
+test a_symlink_to_a_journal_already_open_is_refused ... FAILED
+
+failures:
+
+---- a_symlink_to_a_journal_already_open_is_refused stdout ----
+
+thread 'a_symlink_to_a_journal_already_open_is_refused' (927585) panicked at crates/ledger-store/tests/lock.rs:30:18:
+a symlink opened a journal that is already in use
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    a_symlink_to_a_journal_already_open_is_refused
+
+test result: FAILED. 3 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+error: test failed, to rerun pass `-p ledger-store --test lock`
+```
+
+- **The new test fails, as the finding predicted:** the symlink opened a journal that was already in use.
+- **The adjusted assertion passed before the fix too.** This machine's tempdir path contains no symlinks, so canonicalizing it changes nothing here. It matters where the temp directory sits behind a symlink: on macOS, `/var` links to `/private/var` (inferred; not run here).
+
+**Green:** after the fix:
+
+```
+$ nix develop -c bash -o pipefail -c 'cargo fmt --all -- --check && echo "(formatted)"; cargo test -p ledger-store --test lock 2>&1 | grep -vE "^\s+(Compiling|Finished|Running)"'
+(formatted)
+
+running 4 tests
+test in_memory_journals_do_not_contend ... ok
+test a_symlink_to_a_journal_already_open_is_refused ... ok
+test the_journal_opens_again_once_its_holder_is_dropped ... ok
+test a_journal_already_open_is_refused ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+```
+
+### The gates, in CI's order, plus the crash test (Task 3, again)
+
+At `4598ad2`, with Task 3's command unchanged. Complete:
+
+```
+$ ./scripts/ratchets/all.sh
+core-line-budget: ok (234 of 250 lines)
+core-purity: ok
+no-dev-paths: ok
+sql-containment: ok
+wire-types-in-api: ok
+all 5 ratchets hold
+exit 0
+
+$ ./scripts/ratchets/test-ratchets.sh
+core-line-budget
+  ok    clean tree                                     exit 0
+  ok    fail-over-budget                               exit 1
+  ok    pass-tests-and-comments-do-not-count           exit 0
+  ok    pass-tests-file-does-not-count                 exit 0
+core-purity
+  ok    clean tree                                     exit 0
+  ok    fail-ambient-time                              exit 1
+  ok    fail-dependency-outside-allowlist              exit 1
+  ok    fail-network-in-source                         exit 1
+  ok    pass-dev-dependency                            exit 0
+  ok    pass-named-in-comment                          exit 0
+no-dev-paths
+  ok    clean tree                                     exit 0
+  ok    fail-bypass-env                                exit 1
+  ok    fail-debug-assertions                          exit 1
+  ok    fail-dev-feature                               exit 1
+  ok    pass-lookalikes-and-comments                   exit 0
+sql-containment
+  ok    clean tree                                     exit 0
+  ok    fail-query-in-core                             exit 1
+  ok    fail-rusqlite-in-server-manifest               exit 1
+  ok    pass-named-in-comment                          exit 0
+  ok    pass-query-in-store                            exit 0
+wire-types-in-api
+  ok    clean tree                                     exit 0
+  ok    fail-derive-in-core                            exit 1
+  ok    fail-hand-impl-in-server                       exit 1
+  ok    pass-derive-in-api                             exit 0
+  ok    pass-named-in-comment                          exit 0
+all 5 ratchets can fail, and no comment trips one
+exit 0
+
+$ cargo fmt --all -- --check
+(formatted)
+exit 0
+
+$ cargo clippy --workspace --all-targets -- -D warnings
+    Checking ledger-store v0.1.0 (…/crates/ledger-store)
+    Checking ledgerd v0.1.0 (…/crates/ledgerd)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.34s
+exit 0
+
+$ cargo test --workspace
+running 0 tests
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+running 3 tests
+test the_demo_job_declares_itself_idempotent ... ok
+test commands_and_refusals_round_trip ... ok
+test events_round_trip ... ok
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+running 1 test
+test backoff::tests::doubles_then_caps ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+running 7 tests
+test a_completed_job_records_its_result ... ok
+test a_duplicate_submission_records_nothing ... ok
+test a_failure_retries_with_backoff_until_attempts_run_out ... ok
+test an_expired_lease_is_retried_and_its_holder_is_refused ... ok
+test an_unknown_job_is_refused ... ok
+test nothing_due_means_nothing_leased ... ok
+test zero_attempts_is_refused ... ok
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+running 5 tests
+test attempts_never_exceed_max_attempts ... ok
+test a_job_succeeds_at_most_once ... ok
+test replaying_the_events_rebuilds_the_state ... ok
+test a_stale_lease_changes_nothing ... ok
+test the_same_commands_give_the_same_events ... ok
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.38s
+running 6 tests
+test a_finished_effect_completes_without_running_again ... ok
+test a_lease_whose_effect_never_started_is_retried_whatever_its_kind ... ok
+test an_unfinished_idempotent_effect_is_re_driven ... ok
+test an_unfinished_non_idempotent_effect_is_killed_not_repeated ... ok
+test the_last_attempt_dies_instead_of_retrying ... ok
+test jobs_that_are_not_leased_are_left_alone ... ok
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+running 0 tests
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+running 5 tests
+test an_attempt_records_its_intent_once ... ok
+test an_outcome_finishes_its_intent ... ok
+test an_outcome_without_an_intent_is_refused ... ok
+test an_intent_without_an_outcome_is_unfinished ... ok
+test unfinished_effects_survive_a_reopen_oldest_first ... ok
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+running 4 tests
+test an_empty_journal_replays_nothing ... ok
+test events_replay_in_append_order ... ok
+test the_journal_survives_a_reopen ... ok
+test any_batching_replays_the_same_sequence ... ok
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.24s
+running 4 tests
+test in_memory_journals_do_not_contend ... ok
+test a_symlink_to_a_journal_already_open_is_refused ... ok
+test the_journal_opens_again_once_its_holder_is_dropped ... ok
+test a_journal_already_open_is_refused ... ok
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+running 0 tests
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+running 0 tests
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+running 1 test
+test a_job_killed_mid_effect_completes_exactly_once_after_restart ... ignored, spawns and kills the real server; run by CI's crash-recovery job
+test result: ok. 0 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s
+running 3 tests
+test an_unknown_job_is_not_found_and_zero_attempts_is_refused ... ok
+test a_duplicate_submission_returns_the_same_job ... ok
+test a_submitted_job_runs_to_success ... ok
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.15s
+running 1 test
+test a_second_ledgerd_on_the_same_journal_exits_and_changes_nothing ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.16s
+running 0 tests
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+running 0 tests
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+running 0 tests
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+running 0 tests
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+exit 0
+
+$ cargo test -p ledgerd --test crash_recovery -- --ignored --nocapture
+
+running 1 test
+killed mid-effect: signal: 9 (SIGKILL)
+ledgerd: recovered 1 leased job(s) after a restart
+succeeded 3.067353478s after the kill: {"effect":{"Finished":{"attempt":2}},"job":{"attempts":2,"id":0,"idempotency_key":"crash","kind":{"SleepThenRecord":{"ms":2000,"token":"crash-test"}},"max_attempts":3,"state":{"Succeeded":{"result":"crash-test"}}}}
+test a_job_killed_mid_effect_completes_exactly_once_after_restart ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.20s
+
+exit 0
+```
+
+- All 5 ratchets hold, and the ratchet self-tests pass.
+- The code is formatted, and clippy is clean.
+- 39 tests pass and 0 fail: the 38 from before, plus the new symlink test.
+- The crash test passes after `kill -9`.
+- `core-line-budget` still reads 234 of 250.
+
+### The alias check, again
+
+`target/plan05/alias.sh` is unchanged since its first run. It doesn't build, so the same capture rebuilds `ledgerd` first:
+
+```
+$ nix develop -c bash -o pipefail -c 'echo "\$ cargo build -p ledgerd"; cargo build -p ledgerd 2>&1; echo "\$ bash target/plan05/alias.sh"; bash target/plan05/alias.sh'
+$ cargo build -p ledgerd
+   Compiling ledger-store v0.1.0 (…/crates/ledger-store)
+   Compiling ledgerd v0.1.0 (…/crates/ledgerd)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.36s
+$ bash target/plan05/alias.sh
+dir: target/plan05/alias.VWY9iA
+a stdout: ledgerd listening on 127.0.0.1:41401
+$ LEDGER_DB=$DIR/ledger.db ledgerd   # B, same path as A
+b exited with status 1; stderr: Error: Store(JournalInUse { lock: "…/target/plan05/alias.VWY9iA/ledger.db.lock" })
+$ LEDGER_DB=$DIR/alias.db ledgerd    # C, a symlink to A's journal
+c exited with status 1; stderr: Error: Store(JournalInUse { lock: "…/target/plan05/alias.VWY9iA/ledger.db.lock" })
+still running? A: yes, B: no, C: no
+$ ls -1 $DIR | grep -v '\.\(out\|err\)$'
+alias.db
+ledger.db
+ledger.db.lock
+ledger.db-shm
+ledger.db-wal
+```
+
+- **C, on the symlink, is now refused.** Its error names the same lock as B's: `ledger.db.lock`, beside the real journal. Before the fix, C started and took `alias.db.lock`.
+- **The listing shows one lock file.** No `alias.db.lock` was created.
+- **The lock path in the error is now absolute,** because it is resolved. Before, it was the path as given. In the harness, for example, that was relative: `target/brief05/…`.
+
+### What this changes in the sections above
+
+- **The Result's third bullet, and finding 1:** a symlink to the journal file no longer gets past the lock. The store test and the alias run above measure it.
+- **Inferred, "Other spellings of the path":**
+  - The symlink-to-file case is closed.
+  - A relative path, a path through `..` and a path through a symlinked directory still meet at one lock file, now because they resolve to one real path. Only the symlink to the file is measured. The others are inferred from `canonicalize`.
+  - A hard link still gets its own lock file. `canonicalize` resolves symlinks and `..`, but a hard link is a second real path. That is inferred, not measured. As the section above says, SQLite's `-wal` naming makes a hard-linked journal unsafe anyway.
+- **Findings 3 and 4** can no longer be reached through a symlink to the journal file.
+
+### Inferred (not proven by this addendum)
+
+- **A journal first created through a dangling symlink.** Suppose the journal doesn't exist yet, and `LEDGER_DB` is a symlink whose target doesn't exist either:
+  - `canonicalize` fails with `NotFound`, so the lock is named after the symlink, in the symlink's directory.
+  - If SQLite then creates the target through the symlink, a later process given the target's own path resolves to a different lock file. The first alias run suggests SQLite follows symlinks: it created no `alias.db-wal`.
+  - None of this is measured.
+- **The path is resolved once, at open.** Suppose the journal, or a directory on its path, is renamed or re-linked while `ledgerd` runs. A new process could then resolve to a different lock file. Not measured.
+- **The `.` fallback is not tested.** That is the case of a bare file name, such as `LEDGER_DB=ledger.db`, given before the journal exists. A test would have to change the working directory, which every test running in parallel in the same process would see. The harness and the alias runs use relative paths that have a directory part.
+- **Not reached by any test:** the `InvalidInput` error for a path that names no file, and a parent directory that can't be resolved.
+
+### Commits
+
+```
+$ git log --format='%h %an <%ae>%n    %s%n    %(trailers:key=Co-Authored-By)' -1 4598ad2
+4598ad2 Andrew Malkin <26385844+ioitiki@users.noreply.github.com>
+    ledger-store: name the journal's lock after its resolved path
+    Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+
+```
+
+This addendum is committed after it, with the same author and trailer. Nothing under `scripts/` or `crates/ledger-core/` changed, and no ratchet blocked the follow-up.
+
+### Deviations from the follow-up
+
+1. **"When the journal exists" is decided by `canonicalize` itself.** There is no separate `exists()` check, so nothing can change between a check and the call.
+   - `NotFound` takes the parent route.
+   - Any other error is `StoreError::Lock`.
+2. **The alias capture rebuilds `ledgerd` first,** because `alias.sh` runs `target/debug/ledgerd` without building it.
+3. **Brief 05's harness was not re-run.** The follow-up didn't ask for it. The `ledgerd` test, `a_second_ledgerd_on_the_same_journal_exits_and_changes_nothing`, passed in the gates above.
+4. **Commands outside the dev shell:**
+   - `git` and `gh`
+   - one `sed -i`, which changed one import line in `lib.rs` to `use std::fs::{self, File, OpenOptions, TryLockError};`
+   - `awk` with `target/plan05/splice.awk`, and `cat`, which spliced this addendum from a draft under `target/plan05/` and appended it
+   - `cp`, which kept the report as it stood before the addendum, as `target/plan05/report-before-addendum.md`
+
+   The code edits and the line under finding 1 were made with Claude Code's file editor. Every cargo, rustfmt and ratchet command, and the alias script, ran in `nix develop`. Shellcheck was not re-run, because no shell script changed.
+5. **The Debug-form error output is unchanged,** as instructed.
