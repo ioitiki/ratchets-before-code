@@ -8,7 +8,7 @@ It is two things at once. It is a small, working job ledger in Rust, with a pure
 
 Agents make the same reasonable exception under deadline that people make. They just make it far more often.
 
-I learned this on a large agent platform I led. Nobody decided to let it decay. It got there one defensible change at a time. A new kind of conversation turn needed slightly different handling, so it got its own handler. Then another. Eventually there were about a hundred special-case turn handlers, each one reasonable on the day it was written. The development code path forked from the production one, because something needed to work locally before Friday. An authorization check got bypassed on one path for the same kind of reason.
+I learned this on a large agent platform I led. Nobody decided to let it decay. It got there one defensible change at a time. A new kind of conversation turn needed slightly different handling, so it got its own handler. Then another. Eventually its chat module had about a hundred files, built around some forty special-case turn handlers, each one reasonable on the day it was written. The development code path forked from the production one, because something needed to work locally before Friday. An authorization check got bypassed on one path for the same kind of reason.
 
 Each of those was a reasonable exception made under deadline. The damage was in the sum, and nobody ever approved the sum.
 
@@ -81,7 +81,7 @@ Everything above links to real artifacts:
 
 This repo is small on purpose: about 2,000 lines of Rust you can read in an hour. The method came from somewhere larger.
 
-gato-os is an agent kernel I architect. It was built in about 9 weeks. Its ratchets shipped in its first commit. The kernel is about 4,800 implementation lines under a 15,000-line budget that CI enforces, and the project has about 2,100 tests. On every pull request and every push to `main`, a crash-recovery job kills the kernel in the middle of a turn and checks that it recovers.
+gato-os is an agent kernel I architect. It was built in about 9 weeks. Its first four ratchets shipped in its first commit, and seven were running within the week. The kernel and its ABI are about 6,800 implementation lines under a 15,000-line budget that CI enforces and that has never been raised, and the project has about 2,100 tests. On every pull request and every push to `main`, a crash-recovery job kills the kernel in the middle of a turn and checks that it recovers.
 
 That code is private. This repository is the clean-room version of how it was built: same method, none of its code.
 
