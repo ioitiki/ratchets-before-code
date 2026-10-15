@@ -1,0 +1,61 @@
+journal: target/brief05/long-lease.vwtj4o/ledger.db
+$ cargo build -p ledgerd
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.04s
++0.0s A started: pid 626868, LEDGER_ADDR=127.0.0.1:0, stdout: ledgerd listening on 127.0.0.1:37847
++0.0s A: submit job 0, a 35 s sleep_then_record (the lease is 30 s), then job 1, a 1 ms one
+A: {"job":0,"created":true} 201
+A: {"job":1,"created":true} 201
++0.1s
+  A sees job 0: Pending, attempts 0, effect NotStarted
+  A sees job 1: Pending, attempts 0, effect NotStarted
+  events:  Submitted(0) Submitted(1)
+  effects: 
++0.3s
+  A sees job 0: Leased(lease 0, live), attempts 1, effect InFlight(1)
+  A sees job 1: Pending, attempts 0, effect NotStarted
+  events:  Submitted(0) Submitted(1) Leased(0,0,1)
+  effects: (0,1)=none
++30.2s
+  A sees job 0: Leased(lease 0, past its expiry), attempts 1, effect InFlight(1)
+  A sees job 1: Pending, attempts 0, effect NotStarted
+  events:  Submitted(0) Submitted(1) Leased(0,0,1)
+  effects: (0,1)=none
++35.3s
+  A sees job 0: Succeeded, attempts 1, effect Finished(1)
+  A sees job 1: Succeeded, attempts 1, effect Finished(1)
+  events:  Submitted(0) Submitted(1) Leased(0,0,1) Succeeded(0) Leased(1,1,1) Succeeded(1)
+  effects: (0,1)=long (1,1)=short
++38.4s quiet: nothing has changed for 3 s
+== A's stderr
+(empty)
+== events
++-----+-----------+-----+--------------------+
+| seq |   kind    | job |       detail       |
++-----+-----------+-----+--------------------+
+|   1 | Submitted |   0 | key long           |
+|   2 | Submitted |   1 | key short          |
+|   3 | Leased    |   0 | lease 0, attempt 1 |
+|   4 | Succeeded |   0 | result long        |
+|   5 | Leased    |   1 | lease 1, attempt 1 |
+|   6 | Succeeded |   1 | result short       |
++-----+-----------+-----+--------------------+
+== effects
++-----+---------+-----------------------+---------+
+| job | attempt | intent_ms_after_first | outcome |
++-----+---------+-----------------------+---------+
+|   0 |       1 |                     0 | long    |
+|   1 |       1 |                 35020 | short   |
++-----+---------+-----------------------+---------+
+== per job
++-----+-----------+--------+---------+----------+-----------+
+| job | submitted | leases | intents | outcomes | succeeded |
++-----+-----------+--------+---------+----------+-----------+
+|   0 |         1 |      1 |       1 |        1 |         1 |
+|   1 |         1 |      1 |       1 |        1 |         1 |
++-----+-----------+--------+---------+----------+-----------+
+== the file
++--------+-----------+----------+-----------------+
+| events | first_seq | last_seq | integrity_check |
++--------+-----------+----------+-----------------+
+|      6 |         1 |        6 | ok              |
++--------+-----------+----------+-----------------+

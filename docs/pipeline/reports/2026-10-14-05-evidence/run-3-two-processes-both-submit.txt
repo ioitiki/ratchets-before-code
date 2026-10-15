@@ -1,0 +1,122 @@
+journal: target/brief05/two-processes-both-submit-1.BVghmP/ledger.db
+$ cargo build -p ledgerd
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.04s
++0.0s A started: pid 644377, LEDGER_ADDR=127.0.0.1:0, stdout: ledgerd listening on 127.0.0.1:46053
++0.0s A: submit job 0, a 5 s sleep_then_record
+A: {"job":0,"created":true} 201
++0.1s A sees job 0: Leased(lease 0, live), attempts 1, effect InFlight(1)
++0.1s A's lease on job 0 has 29964 ms left; starting B on the same LEDGER_DB
++0.2s B started: pid 644515, LEDGER_ADDR=127.0.0.1:0, stdout: ledgerd listening on 127.0.0.1:45275
++0.2s
+  A sees job 0: Leased(lease 0, live), attempts 1, effect Finished(1)
+  B sees job 0: Pending, attempts 1, effect Finished(1)
+  events:  Submitted(0) Leased(0,0,1) Retrying(0)
+  effects: (0,1)=abandoned
++1.4s
+  A sees job 0: Leased(lease 0, live), attempts 1, effect Finished(1)
+  B sees job 0: Leased(lease 1, live), attempts 2, effect InFlight(2)
+  events:  Submitted(0) Leased(0,0,1) Retrying(0) Leased(0,1,2)
+  effects: (0,1)=abandoned (0,2)=none
++5.1s
+  A sees job 0: Succeeded, attempts 1, effect Finished(1)
+  B sees job 0: Leased(lease 1, live), attempts 2, effect InFlight(2)
+  events:  Submitted(0) Leased(0,0,1) Retrying(0) Leased(0,1,2) Succeeded(0)
+  effects: (0,1)=run-1 (0,2)=none
++6.3s
+  A sees job 0: Succeeded, attempts 1, effect Finished(1)
+  B sees job 0: Succeeded, attempts 2, effect Finished(2)
+  events:  Submitted(0) Leased(0,0,1) Retrying(0) Leased(0,1,2) Succeeded(0) Succeeded(0)
+  effects: (0,1)=run-1 (0,2)=run-1
++9.3s quiet: nothing has changed for 3 s
++9.3s submit one new job to each process
+A: {"job":1,"created":true} 201
+B: {"job":1,"created":true} 201
++9.4s
+  A sees job 0: Succeeded, attempts 1, effect Finished(1)
+  A sees job 1: Pending, attempts 0, effect NotStarted
+  B sees job 0: Succeeded, attempts 2, effect Finished(2)
+  B sees job 1: Leased(lease 2, live), attempts 1, effect InFlight(1)
+  events:  Submitted(0) Leased(0,0,1) Retrying(0) Leased(0,1,2) Succeeded(0) Succeeded(0) Submitted(1) Submitted(1) Leased(1,2,1)
+  effects: (0,1)=run-1 (0,2)=run-1 (1,1)=none
++9.7s
+  A sees job 0: Succeeded, attempts 1, effect Finished(1)
+  A sees job 1: Leased(lease 1, live), attempts 1, effect InFlight(1)
+  B sees job 0: Succeeded, attempts 2, effect Finished(2)
+  B sees job 1: Leased(lease 2, live), attempts 1, effect InFlight(1)
+  events:  Submitted(0) Leased(0,0,1) Retrying(0) Leased(0,1,2) Succeeded(0) Succeeded(0) Submitted(1) Submitted(1) Leased(1,2,1) Leased(1,1,1)
+  effects: (0,1)=run-1 (0,2)=run-1 (1,1)=none
++10.0s
+  A sees job 0: Succeeded, attempts 1, effect Finished(1)
+  A sees job 1: Leased(lease 1, live), attempts 1, effect Finished(1)
+  B sees job 0: Succeeded, attempts 2, effect Finished(2)
+  B sees job 1: Succeeded, attempts 1, effect Finished(1)
+  events:  Submitted(0) Leased(0,0,1) Retrying(0) Leased(0,1,2) Succeeded(0) Succeeded(0) Submitted(1) Submitted(1) Leased(1,2,1) Leased(1,1,1) Succeeded(1)
+  effects: (0,1)=run-1 (0,2)=run-1 (1,1)=from-b
++39.6s
+  A sees job 0: Succeeded, attempts 1, effect Finished(1)
+  A sees job 1: Pending, attempts 1, effect Finished(1)
+  B sees job 0: Succeeded, attempts 2, effect Finished(2)
+  B sees job 1: Succeeded, attempts 1, effect Finished(1)
+  events:  Submitted(0) Leased(0,0,1) Retrying(0) Leased(0,1,2) Succeeded(0) Succeeded(0) Submitted(1) Submitted(1) Leased(1,2,1) Leased(1,1,1) Succeeded(1) Retrying(1)
+  effects: (0,1)=run-1 (0,2)=run-1 (1,1)=from-b
++40.7s
+  A sees job 0: Succeeded, attempts 1, effect Finished(1)
+  A sees job 1: Leased(lease 2, live), attempts 2, effect InFlight(2)
+  B sees job 0: Succeeded, attempts 2, effect Finished(2)
+  B sees job 1: Succeeded, attempts 1, effect Finished(1)
+  events:  Submitted(0) Leased(0,0,1) Retrying(0) Leased(0,1,2) Succeeded(0) Succeeded(0) Submitted(1) Submitted(1) Leased(1,2,1) Leased(1,1,1) Succeeded(1) Retrying(1) Leased(1,2,2)
+  effects: (0,1)=run-1 (0,2)=run-1 (1,1)=from-b (1,2)=none
++41.2s
+  A sees job 0: Succeeded, attempts 1, effect Finished(1)
+  A sees job 1: Succeeded, attempts 2, effect Finished(2)
+  B sees job 0: Succeeded, attempts 2, effect Finished(2)
+  B sees job 1: Succeeded, attempts 1, effect Finished(1)
+  events:  Submitted(0) Leased(0,0,1) Retrying(0) Leased(0,1,2) Succeeded(0) Succeeded(0) Submitted(1) Submitted(1) Leased(1,2,1) Leased(1,1,1) Succeeded(1) Retrying(1) Leased(1,2,2) Succeeded(1)
+  effects: (0,1)=run-1 (0,2)=run-1 (1,1)=from-b (1,2)=from-a
++44.3s quiet: nothing has changed for 3 s
+== still running at the end? A: yes, B: yes
+== A's stderr
+ledgerd: executor: sqlite: UNIQUE constraint failed: effects.job, effects.attempt
+== B's stderr
+ledgerd: recovered 1 leased job(s) after a restart
+== events
++-----+-----------+-----+-----------------------+
+| seq |   kind    | job |        detail         |
++-----+-----------+-----+-----------------------+
+|   1 | Submitted |   0 | key long              |
+|   2 | Leased    |   0 | lease 0, attempt 1    |
+|   3 | Retrying  |   0 | restarted mid-attempt |
+|   4 | Leased    |   0 | lease 1, attempt 2    |
+|   5 | Succeeded |   0 | result run-1          |
+|   6 | Succeeded |   0 | result run-1          |
+|   7 | Submitted |   1 | key to-a              |
+|   8 | Submitted |   1 | key to-b              |
+|   9 | Leased    |   1 | lease 2, attempt 1    |
+|  10 | Leased    |   1 | lease 1, attempt 1    |
+|  11 | Succeeded |   1 | result from-b         |
+|  12 | Retrying  |   1 | lease expired         |
+|  13 | Leased    |   1 | lease 2, attempt 2    |
+|  14 | Succeeded |   1 | result from-a         |
++-----+-----------+-----+-----------------------+
+== effects
++-----+---------+-----------------------+---------+
+| job | attempt | intent_ms_after_first | outcome |
++-----+---------+-----------------------+---------+
+|   0 |       1 |                     0 | run-1   |
+|   0 |       2 |                  1069 | run-1   |
+|   1 |       1 |                  9329 | from-b  |
+|   1 |       2 |                 40476 | from-a  |
++-----+---------+-----------------------+---------+
+== per job
++-----+-----------+--------+---------+----------+-----------+
+| job | submitted | leases | intents | outcomes | succeeded |
++-----+-----------+--------+---------+----------+-----------+
+|   0 |         1 |      2 |       2 |        2 |         2 |
+|   1 |         2 |      3 |       2 |        2 |         2 |
++-----+-----------+--------+---------+----------+-----------+
+== the file
++--------+-----------+----------+-----------------+
+| events | first_seq | last_seq | integrity_check |
++--------+-----------+----------+-----------------+
+|     14 |         1 |       14 | ok              |
++--------+-----------+----------+-----------------+
