@@ -56,7 +56,7 @@ Every piece of work moves through four documents: a **brief** (the question), a 
 
 The rule that makes this work: **the coordinator re-runs every gate a worker claims passed before anything merges.** The reports separate what was *measured* from what was *inferred*. A claim without its command and output doesn't count.
 
-Agents are good at this when the plan is specific. They're also good at catching the coordinator. In [plan 02](docs/pipeline/reports/2026-10-14-02-ledger-core.md), the worker noticed that my gate script piped `cargo clippy` into `tail` and then printed `$?`. That was `tail`'s exit status, not clippy's. A failing build would have reported `exit 0`. Every later plan runs its gates under `bash -o pipefail`.
+Agents are good at this when the plan is specific. They're also good at catching the coordinator. In [plan 02](docs/pipeline/reports/2026-10-14-02-ledger-core.md), the worker noticed that the coordinator's gate script piped `cargo clippy` into `tail` and then printed `$?`. That was `tail`'s exit status, not clippy's. A failing build would have reported `exit 0`. Every later plan runs its gates under `bash -o pipefail`.
 
 ## Investigations that build nothing
 
