@@ -5,7 +5,8 @@
 //! and the caller folds them with `ledger_core::apply`.
 
 use std::fmt;
-use std::path::Path;
+use std::fs::{File, OpenOptions, TryLockError};
+use std::path::{Path, PathBuf};
 
 use ledger_api::{Event, JobId, Millis};
 use rusqlite::{Connection, OptionalExtension, params};
@@ -30,6 +31,10 @@ pub enum StoreError {
         job: JobId,
         attempt: u32,
     },
+    /// Another holder has the journal's lock. One `ledgerd` per journal (ADR 0005).
+    JournalInUse { lock: PathBuf },
+    /// The journal's lock file could not be opened or locked.
+    Lock(std::io::Error),
 }
 
 impl fmt::Display for StoreError {
@@ -40,6 +45,12 @@ impl fmt::Display for StoreError {
             StoreError::NoSuchIntent { job, attempt } => {
                 write!(f, "no intent recorded for job {} attempt {attempt}", job.0)
             }
+            StoreError::JournalInUse { lock } => write!(
+                f,
+                "journal in use by another process (lock held on {})",
+                lock.display()
+            ),
+            StoreError::Lock(e) => write!(f, "journal lock: {e}"),
         }
     }
 }
@@ -62,29 +73,38 @@ pub type Result<T> = std::result::Result<T, StoreError>;
 
 pub struct Store {
     conn: Connection,
+    /// The journal's lock, held for as long as the store lives. The kernel
+    /// releases it when the process dies, however it dies.
+    _lock: Option<File>,
 }
 
 impl Store {
     /// Open (or create) the journal at `path`.
     ///
+    /// It takes the journal's exclusive lock first (ADR 0005), before reading
+    /// anything. If another store already holds that lock, in this process or
+    /// any other, this fails with [`StoreError::JournalInUse`] and touches
+    /// nothing.
+    ///
     /// WAL mode with `synchronous = FULL`: a committed append survives the
     /// process being killed at any instant, which is the failure the
     /// crash-recovery test produces.
     pub fn open(path: &Path) -> Result<Store> {
+        let lock = lock_journal(path)?;
         let conn = Connection::open(path)?;
         conn.pragma_update(None, "journal_mode", "WAL")?;
         conn.pragma_update(None, "synchronous", "FULL")?;
-        Store::with_schema(conn)
+        Store::with_schema(conn, Some(lock))
     }
 
-    /// A journal that lives only as long as this value.
+    /// A journal that lives only as long as this value. No lock: nothing else can reach it.
     pub fn open_in_memory() -> Result<Store> {
-        Store::with_schema(Connection::open_in_memory()?)
+        Store::with_schema(Connection::open_in_memory()?, None)
     }
 
-    fn with_schema(conn: Connection) -> Result<Store> {
+    fn with_schema(conn: Connection, lock: Option<File>) -> Result<Store> {
         conn.execute_batch(SCHEMA)?;
-        Ok(Store { conn })
+        Ok(Store { conn, _lock: lock })
     }
 
     /// Append events in one transaction: all of them are recorded, or none are.
@@ -171,6 +191,28 @@ impl Store {
             });
         }
         Ok(intents)
+    }
+}
+
+/// Take the journal's exclusive lock without waiting, or refuse.
+///
+/// The lock lives on a sidecar file, `<journal>.lock`, never on the journal
+/// itself. SQLite holds POSIX locks on the journal, and those are dropped when
+/// any other descriptor for the same file is closed.
+fn lock_journal(path: &Path) -> Result<File> {
+    let mut name = path.as_os_str().to_owned();
+    name.push(".lock");
+    let lock = PathBuf::from(name);
+    let file = OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .write(true)
+        .open(&lock)
+        .map_err(StoreError::Lock)?;
+    match file.try_lock() {
+        Ok(()) => Ok(file),
+        Err(TryLockError::WouldBlock) => Err(StoreError::JournalInUse { lock }),
+        Err(TryLockError::Error(e)) => Err(StoreError::Lock(e)),
     }
 }
 
