@@ -44,3 +44,24 @@ fn a_submitted_job_runs_to_success() {
     );
     assert_eq!(status["effect"]["Finished"]["attempt"], 1);
 }
+
+#[test]
+fn a_duplicate_submitted_after_a_restart_returns_the_same_job() {
+    // The core refuses a duplicate key against state that replay rebuilds
+    // from the journal, so no lookup in the journal is needed (plan 06).
+    let dir = tempfile::tempdir().unwrap();
+    let db = dir.path().join("ledger.db");
+    let body = r#"{"idempotency_key":"once","kind":{"SleepThenRecord":{"ms":1,"token":"t"}},"max_attempts":1}"#;
+
+    let first = start(&db);
+    let (code, reply) = http(&first.addr, "POST", "/jobs", Some(body));
+    assert_eq!(code, 201, "{reply}");
+    let job = json(&reply)["job"].clone();
+    drop(first);
+
+    let second = start(&db);
+    let (code, reply) = http(&second.addr, "POST", "/jobs", Some(body));
+    assert_eq!(code, 200, "{reply}");
+    assert_eq!(json(&reply)["job"], job);
+    assert_eq!(json(&reply)["created"], false);
+}
