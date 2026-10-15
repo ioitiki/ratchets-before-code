@@ -399,6 +399,7 @@ version = "0.1.0"
 dependencies = [
  "ledger-api",
  "proptest",
+ "rusqlite",
 ]
 
 [[package]]
