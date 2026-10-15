@@ -9,10 +9,25 @@ fn a_journal_already_open_is_refused() {
     let _first = Store::open(&path).unwrap();
     match Store::open(&path) {
         Err(StoreError::JournalInUse { lock }) => {
-            assert_eq!(lock, dir.path().join("ledger.db.lock"));
+            let real = dir.path().canonicalize().unwrap();
+            assert_eq!(lock, real.join("ledger.db.lock"));
         }
         Err(other) => panic!("expected JournalInUse, got: {other}"),
         Ok(_) => panic!("a second store opened a journal that is already in use"),
+    }
+}
+
+#[test]
+fn a_symlink_to_a_journal_already_open_is_refused() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("ledger.db");
+    let alias = dir.path().join("alias.db");
+    let _first = Store::open(&path).unwrap();
+    std::os::unix::fs::symlink(&path, &alias).unwrap();
+    match Store::open(&alias) {
+        Err(StoreError::JournalInUse { .. }) => {}
+        Err(other) => panic!("expected JournalInUse, got: {other}"),
+        Ok(_) => panic!("a symlink opened a journal that is already in use"),
     }
 }
 

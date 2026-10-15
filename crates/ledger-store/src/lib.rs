@@ -5,7 +5,7 @@
 //! and the caller folds them with `ledger_core::apply`.
 
 use std::fmt;
-use std::fs::{File, OpenOptions, TryLockError};
+use std::fs::{self, File, OpenOptions, TryLockError};
 use std::path::{Path, PathBuf};
 
 use ledger_api::{Event, JobId, Millis};
@@ -201,8 +201,12 @@ impl Store {
 /// The lock lives on a sidecar file, `<journal>.lock`, never on the journal
 /// itself. SQLite holds POSIX locks on the journal, and those are dropped when
 /// any other descriptor for the same file is closed.
+///
+/// The lock is named after the journal's resolved path, so every spelling of
+/// one file (relative, through `..`, or through a symlink to the file or its
+/// directory) meets at one lock file, beside the real journal.
 fn lock_journal(path: &Path) -> Result<File> {
-    let mut name = path.as_os_str().to_owned();
+    let mut name = resolve(path).map_err(StoreError::Lock)?.into_os_string();
     name.push(".lock");
     let lock = PathBuf::from(name);
     let file = OpenOptions::new()
@@ -215,6 +219,27 @@ fn lock_journal(path: &Path) -> Result<File> {
         Ok(()) => Ok(file),
         Err(TryLockError::WouldBlock) => Err(StoreError::JournalInUse { lock }),
         Err(TryLockError::Error(e)) => Err(StoreError::Lock(e)),
+    }
+}
+
+/// The journal's real path. A journal that does not exist yet is resolved
+/// through its directory, which must.
+fn resolve(path: &Path) -> std::io::Result<PathBuf> {
+    match fs::canonicalize(path) {
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            let file = path.file_name().ok_or_else(|| {
+                std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "the journal path names no file",
+                )
+            })?;
+            let dir = match path.parent() {
+                Some(dir) if !dir.as_os_str().is_empty() => dir,
+                _ => Path::new("."),
+            };
+            Ok(fs::canonicalize(dir)?.join(file))
+        }
+        resolved => resolved,
     }
 }
 
