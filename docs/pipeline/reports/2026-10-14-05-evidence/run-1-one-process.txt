@@ -1,0 +1,55 @@
+journal: target/brief05/one-process.dl7ObQ/ledger.db
+$ cargo build -p ledgerd
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.04s
++0.1s A started: pid 613494, LEDGER_ADDR=127.0.0.1:0, stdout: ledgerd listening on 127.0.0.1:41755
+submitting 2000 requests for 1000 keys from 32 concurrent clients
+every key is sent twice, back to back; every tenth key is a Notify job
+all 2000 replies in after 3446 ms; by then 26 jobs had succeeded
+queue drained 15699 ms after the first submission
+== HTTP replies, by status code
+   1000 200
+   1000 201
+== HTTP replies, by key
+keys: 1000; keys whose replies all name the same job: 1000; keys created exactly once: 1000; distinct job ids: 1000
+== events, by kind
++-----------+--------+
+|   kind    | events |
++-----------+--------+
+| Submitted |   1000 |
+| Leased    |   1000 |
+| Succeeded |   1000 |
++-----------+--------+
+== Submitted events per idempotency key
++------------------+------+
+| submitted_events | keys |
++------------------+------+
+|                1 | 1000 |
++------------------+------+
+== effect intents per (job, attempt)
++---------+--------------+
+| intents | job_attempts |
++---------+--------------+
+|       1 |         1000 |
++---------+--------------+
+== per job: leases, intents, outcomes and Succeeded events
++--------+---------+----------+-----------+------+
+| leases | intents | outcomes | succeeded | jobs |
++--------+---------+----------+-----------+------+
+|      1 |       1 |        1 |         1 | 1000 |
++--------+---------+----------+-----------+------+
+== each Succeeded event's result against its own job's token or message
++------------------+------------+
+| succeeded_events | own_result |
++------------------+------------+
+|             1000 |       1000 |
++------------------+------------+
+== did the executor run while clients were still submitting?
++-------------------------------+-------------+
+| leases_before_last_submission | submissions |
++-------------------------------+-------------+
+|                            26 |        1000 |
++-------------------------------+-------------+
+== Notify effects performed, from A's stderr: times each message was sent
+sent 1 time(s): 100 messages
+== A's other stderr lines
+(none)

@@ -1,0 +1,53 @@
+journal: target/brief05/two-processes-same-addr-1.QZgnXp/ledger.db
+$ cargo build -p ledgerd
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.04s
++0.0s A started: pid 642949, LEDGER_ADDR=127.0.0.1:0, stdout: ledgerd listening on 127.0.0.1:37641
++0.0s A: submit job 0, a 5 s sleep_then_record
+A: {"job":0,"created":true} 201
++0.1s A sees job 0: Leased(lease 0, live), attempts 1, effect InFlight(1)
++0.1s A's lease on job 0 has 29965 ms left; starting B on the same LEDGER_DB
++0.2s B did not start: it exited with status 1 before printing an address
++0.2s
+  A sees job 0: Leased(lease 0, live), attempts 1, effect Finished(1)
+  B sees job 0: down
+  events:  Submitted(0) Leased(0,0,1) Retrying(0)
+  effects: (0,1)=abandoned
++5.1s
+  A sees job 0: Succeeded, attempts 1, effect Finished(1)
+  B sees job 0: down
+  events:  Submitted(0) Leased(0,0,1) Retrying(0) Succeeded(0)
+  effects: (0,1)=run-1
++8.2s quiet: nothing has changed for 3 s
+== still running at the end? A: yes, B: no
+== A's stderr
+(empty)
+== B's stderr
+ledgerd: recovered 1 leased job(s) after a restart
+Error: Os { code: 98, kind: AddrInUse, message: "Address already in use" }
+== events
++-----+-----------+-----+-----------------------+
+| seq |   kind    | job |        detail         |
++-----+-----------+-----+-----------------------+
+|   1 | Submitted |   0 | key long              |
+|   2 | Leased    |   0 | lease 0, attempt 1    |
+|   3 | Retrying  |   0 | restarted mid-attempt |
+|   4 | Succeeded |   0 | result run-1          |
++-----+-----------+-----+-----------------------+
+== effects
++-----+---------+-----------------------+---------+
+| job | attempt | intent_ms_after_first | outcome |
++-----+---------+-----------------------+---------+
+|   0 |       1 |                     0 | run-1   |
++-----+---------+-----------------------+---------+
+== per job
++-----+-----------+--------+---------+----------+-----------+
+| job | submitted | leases | intents | outcomes | succeeded |
++-----+-----------+--------+---------+----------+-----------+
+|   0 |         1 |      1 |       1 |        1 |         1 |
++-----+-----------+--------+---------+----------+-----------+
+== the file
++--------+-----------+----------+-----------------+
+| events | first_seq | last_seq | integrity_check |
++--------+-----------+----------+-----------------+
+|      4 |         1 |        4 | ok              |
++--------+-----------+----------+-----------------+

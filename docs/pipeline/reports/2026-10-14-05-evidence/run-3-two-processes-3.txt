@@ -1,0 +1,70 @@
+journal: target/brief05/two-processes-different-addr-3.qYoe3D/ledger.db
+$ cargo build -p ledgerd
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.03s
++0.0s A started: pid 640516, LEDGER_ADDR=127.0.0.1:0, stdout: ledgerd listening on 127.0.0.1:37943
++0.0s A: submit job 0, a 5 s sleep_then_record
+A: {"job":0,"created":true} 201
++0.1s A sees job 0: Leased(lease 0, live), attempts 1, effect InFlight(1)
++0.1s A's lease on job 0 has 29968 ms left; starting B on the same LEDGER_DB
++0.2s B started: pid 640567, LEDGER_ADDR=127.0.0.1:0, stdout: ledgerd listening on 127.0.0.1:38497
++0.2s
+  A sees job 0: Leased(lease 0, live), attempts 1, effect Finished(1)
+  B sees job 0: Pending, attempts 1, effect Finished(1)
+  events:  Submitted(0) Leased(0,0,1) Retrying(0)
+  effects: (0,1)=abandoned
++1.4s
+  A sees job 0: Leased(lease 0, live), attempts 1, effect Finished(1)
+  B sees job 0: Leased(lease 1, live), attempts 2, effect InFlight(2)
+  events:  Submitted(0) Leased(0,0,1) Retrying(0) Leased(0,1,2)
+  effects: (0,1)=abandoned (0,2)=none
++5.1s
+  A sees job 0: Leased(lease 0, live), attempts 1, effect Finished(1)
+  B sees job 0: Leased(lease 1, live), attempts 2, effect InFlight(2)
+  events:  Submitted(0) Leased(0,0,1) Retrying(0) Leased(0,1,2)
+  effects: (0,1)=run-3 (0,2)=none
++5.3s
+  A sees job 0: Succeeded, attempts 1, effect Finished(1)
+  B sees job 0: Leased(lease 1, live), attempts 2, effect InFlight(2)
+  events:  Submitted(0) Leased(0,0,1) Retrying(0) Leased(0,1,2) Succeeded(0)
+  effects: (0,1)=run-3 (0,2)=none
++6.3s
+  A sees job 0: Succeeded, attempts 1, effect Finished(1)
+  B sees job 0: Succeeded, attempts 2, effect Finished(2)
+  events:  Submitted(0) Leased(0,0,1) Retrying(0) Leased(0,1,2) Succeeded(0) Succeeded(0)
+  effects: (0,1)=run-3 (0,2)=run-3
++9.3s quiet: nothing has changed for 3 s
+== still running at the end? A: yes, B: yes
+== A's stderr
+(empty)
+== B's stderr
+ledgerd: recovered 1 leased job(s) after a restart
+== events
++-----+-----------+-----+-----------------------+
+| seq |   kind    | job |        detail         |
++-----+-----------+-----+-----------------------+
+|   1 | Submitted |   0 | key long              |
+|   2 | Leased    |   0 | lease 0, attempt 1    |
+|   3 | Retrying  |   0 | restarted mid-attempt |
+|   4 | Leased    |   0 | lease 1, attempt 2    |
+|   5 | Succeeded |   0 | result run-3          |
+|   6 | Succeeded |   0 | result run-3          |
++-----+-----------+-----+-----------------------+
+== effects
++-----+---------+-----------------------+---------+
+| job | attempt | intent_ms_after_first | outcome |
++-----+---------+-----------------------+---------+
+|   0 |       1 |                     0 | run-3   |
+|   0 |       2 |                  1064 | run-3   |
++-----+---------+-----------------------+---------+
+== per job
++-----+-----------+--------+---------+----------+-----------+
+| job | submitted | leases | intents | outcomes | succeeded |
++-----+-----------+--------+---------+----------+-----------+
+|   0 |         1 |      2 |       2 |        2 |         2 |
++-----+-----------+--------+---------+----------+-----------+
+== the file
++--------+-----------+----------+-----------------+
+| events | first_seq | last_seq | integrity_check |
++--------+-----------+----------+-----------------+
+|      6 |         1 |        6 | ok              |
++--------+-----------+----------+-----------------+

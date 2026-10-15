@@ -1,0 +1,50 @@
+$ grep -rnE 'SystemTime|Instant' crates/*/src
+crates/ledgerd/src/lib.rs:9:use std::time::{Duration, SystemTime, UNIX_EPOCH};
+crates/ledgerd/src/lib.rs:32:    let since_epoch = SystemTime::now()
+$ grep -rnE 'now\(\)' crates/*/src
+crates/ledgerd/src/lib.rs:31:pub fn now() -> Millis {
+crates/ledgerd/src/lib.rs:32:    let since_epoch = SystemTime::now()
+crates/ledgerd/src/lib.rs:257:        let next = ledger.lock().await.next_work(now());
+crates/ledgerd/src/lib.rs:260:                if let Err(e) = ledger.lock().await.start_effect(&work, now()) {
+crates/ledgerd/src/main.rs:17:    let ledger = Arc::new(Mutex::new(ledgerd::Ledger::open(&db, ledgerd::now())?));
+$ grep -rnE 'Command::(Lease|ExpireLeases|Fail) \{' crates/*/src
+crates/ledger-core/src/lib.rs:41:        Command::Lease { now, lease_for_ms } => Ok(state
+crates/ledger-core/src/lib.rs:55:        Command::Fail {
+crates/ledger-core/src/lib.rs:64:        Command::ExpireLeases { now } => Ok(state
+crates/ledgerd/src/lib.rs:193:        self.execute(Command::ExpireLeases { now })?;
+crates/ledgerd/src/lib.rs:194:        let events = self.execute(Command::Lease {
+$ grep -rnE 'recover\(|Ledger::open\(|next_work\(' crates/*/src crates/*/tests
+crates/ledger-core/src/lib.rs:88:pub fn recover(
+crates/ledgerd/src/lib.rs:115:        let events = recover(&self.state, now, |job, attempt| {
+crates/ledgerd/src/lib.rs:192:    pub fn next_work(&mut self, now: Millis) -> Result<Option<Work>, LedgerError> {
+crates/ledgerd/src/lib.rs:257:        let next = ledger.lock().await.next_work(now());
+crates/ledgerd/src/main.rs:17:    let ledger = Arc::new(Mutex::new(ledgerd::Ledger::open(&db, ledgerd::now())?));
+crates/ledger-core/tests/recovery.rs:49:    let events = recover(&state, Millis(100), |_, _| {
+crates/ledger-core/tests/recovery.rs:64:    let events = recover(&state, Millis(100), |_, _| Some(EffectRecord::Unfinished));
+crates/ledger-core/tests/recovery.rs:78:    let events = recover(&state, Millis(100), |_, _| Some(EffectRecord::Unfinished));
+crates/ledger-core/tests/recovery.rs:88:    let events = recover(&state, Millis(100), |_, _| None);
+crates/ledger-core/tests/recovery.rs:98:    let events = recover(&state, Millis(100), |_, _| Some(EffectRecord::Unfinished));
+crates/ledger-core/tests/recovery.rs:117:        recover(&state, Millis(100), |_, _| Some(EffectRecord::Unfinished)),
+$ grep -rnE 'expires|not_before' crates/ledger-core/src
+crates/ledger-core/src/state.rs:41:                JobState::Pending { not_before } if not_before <= now => Some((not_before, job)),
+crates/ledger-core/src/state.rs:44:            .min_by_key(|(not_before, job)| (*not_before, job.id))
+crates/ledger-core/src/state.rs:50:            move |job| matches!(job.state, JobState::Leased { expires, .. } if expires <= now),
+crates/ledger-core/src/state.rs:71:                            not_before: Millis(0),
+crates/ledger-core/src/state.rs:82:                expires,
+crates/ledger-core/src/state.rs:88:                        expires: *expires,
+crates/ledger-core/src/state.rs:102:                job, not_before, ..
+crates/ledger-core/src/state.rs:107:                        not_before: *not_before,
+crates/ledger-core/src/lib.rs:47:                expires: now.plus(lease_for_ms),
+crates/ledger-core/src/lib.rs:140:            not_before: now.plus(backoff_ms(job.attempts)),
+$ grep -nE '\.route\(' crates/ledgerd/src/lib.rs
+280:        .route("/jobs", post(submit))
+281:        .route("/jobs/{id}", get(status))
+$ grep -n -A5 '^pub struct SubmitJob' crates/ledger-api/src/lib.rs
+163:pub struct SubmitJob {
+164-    pub idempotency_key: String,
+165-    pub kind: JobKind,
+166-    pub max_attempts: u32,
+167-}
+168-
+$ ./scripts/ratchets/core-purity.sh .
+core-purity: ok
