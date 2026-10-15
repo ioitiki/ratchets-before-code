@@ -24,11 +24,14 @@ pub struct JobId(pub u64);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct LeaseId(pub u64);
 
-/// What a job does. The demo has one kind.
+/// What a job does.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum JobKind {
     /// Sleep for `ms`, then record `token` as the job's result.
     SleepThenRecord { ms: u64, token: String },
+    /// Send `message`, once. Sending it twice is visible to whoever receives
+    /// it, so this kind is not idempotent.
+    Notify { message: String },
 }
 
 /// What recovery may assume about re-running an effect whose outcome was
@@ -47,6 +50,7 @@ impl JobKind {
     pub fn effect_semantics(&self) -> EffectSemantics {
         match self {
             JobKind::SleepThenRecord { .. } => EffectSemantics::Idempotent,
+            JobKind::Notify { .. } => EffectSemantics::NotIdempotent,
         }
     }
 }
@@ -152,4 +156,34 @@ pub enum Refusal {
         job: JobId,
         lease: LeaseId,
     },
+}
+
+/// The body of `POST /jobs`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SubmitJob {
+    pub idempotency_key: String,
+    pub kind: JobKind,
+    pub max_attempts: u32,
+}
+
+/// The reply to `POST /jobs`. `created` is false when the key was already known.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SubmitReply {
+    pub job: JobId,
+    pub created: bool,
+}
+
+/// What the journal knows about the effect of a job's current attempt.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum EffectStatus {
+    NotStarted,
+    InFlight { attempt: u32 },
+    Finished { attempt: u32 },
+}
+
+/// The reply to `GET /jobs/{id}`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct JobStatus {
+    pub job: Job,
+    pub effect: EffectStatus,
 }
