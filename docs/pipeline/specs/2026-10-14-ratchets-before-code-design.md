@@ -82,7 +82,7 @@ Only `ledger-core`'s dependencies are ratchet-enforced. The other rows show the 
 
 - Every event is appended to the journal before it takes effect in memory. On startup, state is rebuilt by replaying the journal.
 - Executing a job is an **effect**. The executor records an **intent** before running it and an **outcome** after. Every job kind declares its `EffectSemantics` (`Idempotent` or `NotIdempotent`) at registration, and recovery decides from that declaration.
-- On restart, `ledgerd` replays the journal and expires every lease (on a single node, any lease alive at startup belongs to a dead process). Then:
+- On restart, `ledgerd` replays the journal and expires every lease (on a single node, any lease alive at startup belongs to a dead process; ADR 0005 enforces the single node by refusing a second `ledgerd` on the same journal). Then:
   - For an intent with no outcome, if the effect is `Idempotent`, it is re-driven.
   - If it is `NotIdempotent`, the job goes to `Dead` with a reason that names the ambiguity. It is never silently re-run.
 - **Demo job kind:** `sleep_then_record { ms, token }`, declared `Idempotent`. It sleeps, then records `token` as the job's result.

@@ -1,6 +1,7 @@
 //! `ledgerd`: serve the ledger over HTTP and run its jobs.
 //!
-//! LEDGER_DB    path to the journal file (required)
+//! LEDGER_DB    path to the journal file (required). One `ledgerd` per journal:
+//!              a second process on the same file exits with `JournalInUse` (ADR 0005).
 //! LEDGER_ADDR  address to listen on (default 127.0.0.1:8080; port 0 picks a free port)
 
 use std::path::PathBuf;
