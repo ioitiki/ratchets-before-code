@@ -142,12 +142,3 @@ fn after_failed_attempt(job: &Job, reason: String, now: Millis) -> Event {
         }
     }
 }
-
-/// Belt and braces: ask the journal itself whether this key was already submitted.
-pub fn submitted_in_journal(conn: &rusqlite::Connection, key: &str) -> rusqlite::Result<bool> {
-    conn.query_row(
-        "SELECT EXISTS(SELECT 1 FROM events WHERE json_extract(body, '$.Submitted.idempotency_key') = ?1)",
-        [key],
-        |row| row.get(0),
-    )
-}
