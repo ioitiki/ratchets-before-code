@@ -221,7 +221,7 @@ The repository is created **private**. It becomes public only when all of these 
    - email addresses other than the noreply author address
    - secrets (gitleaks, or an equivalent pattern scan)
 
-   Any match blocks publishing.
+   Any match blocks publishing. One recorded exception: the author address on the merge commits of PRs #1–#7 ([ADR 0006](../../decisions/0006-the-merge-commits-keep-their-author-email.md)).
 4. Every report's "Measured" section contains real commands and output.
 
 After the repo is public:
